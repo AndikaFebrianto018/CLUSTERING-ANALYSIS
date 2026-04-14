@@ -1,0 +1,497 @@
+---
+title: "Clustering Analysis pada Dataset Travel Reviews Menggunakan Metode K-Means, K-Medians, DBSCAN, Mean Shift, dan Fuzzy C-Means dengan Evaluasi Silhouette Coefficient"
+author: "24031554018_ANDIKA FEBRIANTO, 
+         24031554193_MUHAMMAD KHOIRUL ILHAM"
+date: "2026-04-13"
+output: html_document
+---
+
+
+Analisis ini bertujuan untuk mengelompokkan data preferensi wisata pengguna berdasarkan dataset Travel Reviews menggunakan beberapa metode clustering, yaitu K-Means, K-Medians, DBSCAN, Mean Shift, dan Fuzzy C-Means. Dataset yang digunakan merupakan data mentah yang diperoleh dari UCI Machine Learning Repository, yang berisi penilaian pengguna terhadap berbagai kategori tempat wisata. Sebelum dilakukan proses clustering, data terlebih dilakukan preprocessing berupa penghapusan fitu yang tidak relevan serta normalisasi menggunakan metode standardisasi untuk memastikan keseragaman skala antar fitur. Penentuan jumlah cluster optimal dilakukan menggunakan metode Elbow dan Silhouette, yang menunjukkan bahwa jumlah cluster terbaik adalah dua. Setiap metode clustering diimplementasikan dan dievaluasi menggunakan Silhouette Coefficient untuk mengukur kualitas pemisahan cluster. Hasil evaluasi menunjukkan adanya perbedaan performa antar metode, di mana metode dengan nilai silhouette tertinggi dipilih sebagai metode terbaik (K-Means). Selain itu, dilakukan Analysis Data Eksploratiion (EDA) pada hasil clustering terbaik untuk mengidentifikasi karakteristik setiap cluster berdasarkan nilai rata-rata fitur. Hasil analisis menunjukkan bahwa terdapat pola pengelompokan pengguna berdasarkan preferensi terhadap kategori wisata tertentu. Analisis ini menegaskan bahwa pemilihan metode clustering yang tepat sangat berpengaruh terhadap kualitas hasil pengelompokan, serta pentingnya evaluasi kuantitatif dalam menentukan metode terbaik.
+
+#Import Dataset from UCI Repo
+```{r}
+url <- "https://archive.ics.uci.edu/static/public/484/data.csv"
+data <- read.csv(url, header = TRUE)
+data
+```
+
+# Cek Struktur Data
+```{r}
+attributes <- data
+str(attributes)
+```
+
+```{r}
+names(data)
+```
+
+#Load Library
+```{r}
+#install.packages(c("dbscan"))
+```
+
+```{r}
+#install.packages(c("e1071"))
+```
+```{r}
+#install.packages(c("ppclust"))
+```
+```{r}
+#install.packages(c("meanShiftR"))
+```
+
+
+```{r}
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(dbscan)
+library(e1071)
+library(ppclust)
+library(meanShiftR)
+```
+
+#Pre-Processing
+```{r}
+#Remove Kolom ID
+data_clean <- data %>% select(-User.ID)
+head(data_clean)
+```
+```{r}
+#EDA awal
+summary(data_clean)
+```
+Output yang dihasilkan menampilkan nilai minimum, kuartil (Q1, median, Q3), rata-rata (mean), dan maksimum dari masing-masing kategori (Category.1 hingga Category.10). Dari hasil tersebut terlihat bahwa setiap variabel memiliki rentang nilai yang berbeda-beda. Seperti, Category.1 memiliki nilai maksimum hingga 3.22, sedangkan Category.7 memiliki rentang yang sangat sempit (sekitar 3.16 hingga 3.21), yang menunjukkan bahwa variabel tersebut relatif stabil dibandingkan variabel lainnya. Perbedaan skala ini dapat mempengaruhi proses clustering karena algoritma berbasis jarak sangat sensitif terhadap skala data. Untuk mengatasi perbedaan skala tersebut, dilakukan proses normalisasi (scaling) yang mengubah setiap variabel agar memiliki rata-rata (mean) sebesar 0 dan standar deviasi sebesar 1.
+
+```{r}
+#Scaling Data
+data_scaled <- scale(data_clean)
+head(data_scaled)
+```
+Output menunjukkan bahwa nilai setiap fitur telah berada dalam skala yang sebanding, dengan nilai positif menunjukkan data di atas rata-rata, dan nilai negatif menunjukkan data di bawah rata-rata. Maka, tidak terdapat lagi variabel yang mendominasi hanya karena memiliki rentang nilai yang lebih besar. Seperti, pada data pertama terlihat bahwa Category.3 memiliki nilai yang cukup tinggi (1.6189231) dibandingkan fitur lain, yang berarti observasi tersebut memiliki nilai Category.3 jauh di atas rata-rata. Sedangkan, Category.5 memiliki nilai negatif (-0.3194447), yang menunjukkan bahwa nilainya berada di bawah rata-rata.
+
+```{r}
+summary(data_scaled)
+```
+Berdasarkan hasil ringkasan statistik, terlihat bahwa seluruh variabel memiliki nilai rata-rata (mean) sebesar 0, yang menunjukkan bahwa proses standardisasi telah dilakukan dengan benar. Hal ini sesuai dengan konsep standardisasi (z-score), di mana setiap variabel ditransformasikan sehingga memiliki mean = 0 dan standar deviasi = 1. Selain itu, nilai median pada sebagian besar variabel berada di sekitar 0, yang menunjukkan bahwa distribusi data telah terpusat di sekitar rata-rata setelah dilakukan transformasi. Nilai kuartil pertama (Q1) dan kuartil ketiga (Q3) juga relatif seimbang di sekitar nol, yang menunjukkan bahwa sebaran data telah menjadi lebih proporsional. Namun, terdapat beberapa nilai maksimum yang cukup tinggi, seperti pada Category.1 (7.11) dan Category.4 (10.39), yang mengindikasikan adanya observasi ekstrem (outlier). Tetapi, keberadaan outlier ini tidak mempengaruhi skala variabel secara keseluruhan karena proses standardisasi telah menyamakan kontribusi setiap fitur dalam perhitungan jarak.
+
+```{r}
+#Ubah scaled data ke DataFrame
+data_scaled <- as.data.frame(data_scaled)
+data_scaled
+```
+
+```{r}
+#Validasi hasil scaled
+summary(data_scaled)
+```
+Output menunjukkan bahwa seluruh variabel telah memiliki nilai rata-rata (mean) mendekati 0, yang merupakan karakteristik utama dari data yang telah dinormalisasi menggunakan metode standardisasi (z-score). Selain itu, distribusi data juga menjadi lebih seimbang antar variabel, meskipun masih terdapat nilai ekstrem (outlier) yang terlihat dari nilai minimum dan maksimum yang cukup jauh dari nol.
+
+#Menentukan Jumlah Cluster (k)
+```{r}
+fviz_nbclust(data_scaled, kmeans, method = "wss")
+fviz_nbclust(data_scaled, kmeans, method = "silhouette")
+```
+Pada grafik WSS (Elbow Method), hasil menunjukkan kurva yang menurun dari kiri ke kanan. Titik di mana penurunan kurva mulai melandai secara tajam yang disebut "siku" (elbow), dan titik itulah nilai k yang optimal. Pada grafik Silhouette, hasil menunjukkan nilai rata-rata silhouette untuk setiap nilai k, dan k dengan nilai silhouette tertinggi adalah yang terbaik. Dari kedua grafik diatas, terlihat bahwa k=2 merupakan jumlah cluster yang digunakan.
+
+```{r}
+k_opt <- 2
+```
+Nilai 2 ditetapkan sebagai jumlah cluster optimal.
+
+
+#METODE CLUSTERING
+
+##K-MEANS
+```{r}
+set.seed(123)
+kmeans_model <- kmeans(data_scaled, centers = k_opt, nstart = 25)
+
+sil_kmeans <- silhouette(kmeans_model$cluster, dist(data_scaled))
+score_kmeans <- mean(sil_kmeans[,3])
+score_kmeans
+```
+Output yang dihasilkan sebesar [1] 0.2131536 menunjukkan bahwa rata-rata nilai silhouette dari hasil clustering K-Means berada pada kisaran rendah (sekitar 0.21). Nilai ini menunjukkan bahwa kualitas pemisahan antar cluster masih kurang optimal, karena nilai silhouette yang baik berada di atas 0.5, sedangkan nilai di bawah 0.25 menunjukkan adanya kemungkinan overlap antar cluster atau batas cluster yang kurang jelas. Oleh karena itu, meskipun K-Means berhasil membentuk dua cluster sesuai dengan parameter yang ditentukan, hasil pengelompokan masih belum menunjukkan struktur cluster yang kuat.
+
+```{r}
+kmeans_model$cluster
+```
+Output berupa deretan angka 1 dan 2 yang panjangnya sesuai jumlah observasi (980 data), di mana setiap angka menunjukkan cluster tempat data tersebut berada. Nilai “1” menunjukkan bahwa data masuk ke cluster pertama, sedangkan nilai “2” menunjukkan data masuk ke cluster kedua.
+
+```{r}
+table(kmeans_model$cluster)
+```
+Output menunjukkan distribusi jumlah anggota cluster, yaitu sebanyak 374 data berada pada cluster 1 dan 606 data berada pada cluster 2. Hal ini menunjukkan bahwa pembagian cluster tidak seimbang, di mana cluster 2 memiliki jumlah anggota yang lebih besar dibandingkan cluster 1, yang menunjukkan bahwa sebagian besar data memiliki karakteristik yang lebih mendekati pola pada cluster 2.
+
+```{r}
+#Centroid
+kmeans_model$centers
+```
+Output menunjukkan bahwa cluster 1 memiliki nilai centroid yang cenderung positif pada sebagian besar fitur (seperti Category.3, Category.6, dan Category.7), yang berarti data dalam cluster ini memiliki nilai di atas rata-rata untuk fitur-fitur tersebut. Sedangkan, cluster 2 memiliki nilai centroid yang dominan negatif pada fitur yang sama, yang menunjukkan bahwa data dalam cluster ini berada di bawah rata-rata. Perbedaan nilai centroid ini menunjukkan adanya pemisahan karakteristik antar cluster, meskipun tidak terlalu kuat.
+
+```{r}
+#silhoutte Coefficient
+head(sil_kmeans)
+```
+Output menunjukkan nilai sil_width yang bervariasi, seperti 0.288, 0.300, hingga 0.087, yang mengindikasikan bahwa beberapa data cukup baik berada dalam cluster-nya (nilai mendekati 0.3), namun ada juga data dengan nilai rendah (mendekati 0) yang menunjukkan bahwa data tersebut berada di batas antar cluster atau memiliki kemiripan dengan cluster lain.
+
+```{r}
+fviz_cluster(kmeans_model, data = data_scaled)
+```
+Visualisasi cluster di atas yang dihasilkan dari proses K-Means, menunjukkan pemisahan data ke dalam dua kelompok berdasarkan hasil reduksi dimensi menggunakan Principal Component Analysis (PCA), yang direpresentasikan oleh sumbu Dim1 (29.8%) dan Dim2 (12.6%). Dim1 menjelaskan sekitar 29.8% variasi data, sehingga menjadi komponen utama dalam membedakan kedua cluster, sedangkan Dim2 menjelaskan tambahan 12.6% variasi. Dari plot tersebut terlihat bahwa cluster 1 (warna merah) cenderung terkonsentrasi pada sisi kanan (nilai Dim1 positif), sedangkan cluster 2 (warna biru) berada di sisi kiri (nilai Dim1 negatif). Hal ini menunjukkan bahwa pemisahan utama antar cluster terjadi secara horizontal berdasarkan Dim1, yang berarti fitur-fitur dalam data memiliki kontribusi besar dalam membedakan kedua kelompok pada komponen utama pertama.
+
+Tetapi, jika diamati lebih dalam, terdapat area di sekitar titik tengah (sekitar Dim1 = 0) di mana kedua cluster saling berdekatan bahkan sedikit overlap. Hal ini menunjukkan bahwa tidak semua data memiliki pemisahan yang jelas antar cluster, sehingga terdapat beberapa observasi yang berada di batas antara cluster 1 dan cluster 2. Selain itu, bentuk poligon pada masing-masing cluster menunjukkan bahwa cluster 2 memiliki sebaran yang lebih luas ke arah kiri, sedangkan cluster 1 lebih menyebar ke kanan. Secara keseluruhan, visualisasi ini memperkuat hasil nilai silhouette yang relatif rendah (~0.21), di mana meskipun pemisahan dua kelompok utama, kualitas pemisahan tersebut belum optimal karena masih terdapat tumpang tindih antar cluster dan batas.
+
+```{r}
+fviz_silhouette(sil_kmeans)
+```
+Visualisasi silhouette plot pada hasil K-Means, menunjukkan kualitas pemisahan cluster berdasarkan nilai silhouette width (Si) untuk setiap observasi. Pada grafik tersebut, setiap batang merepresentasikan satu data, dengan panjang batang menunjukkan nilai silhouette-nya. Nilai Si berada pada rentang -1 hingga 1, di mana nilai mendekati 1 menunjukkan bahwa data sangat cocok dengan cluster-nya dan jauh dari cluster lain, nilai mendekati 0 menunjukkan data berada di batas antara dua cluster, sedangkan nilai negatif menunjukkan kemungkinan salah pengelompokan. Dari output yang ditampilkan, terlihat bahwa sebagian besar nilai silhouette berada pada rentang sekitar 0 hingga 0.4, dengan beberapa data bahkan memiliki nilai mendekati 0 atau sedikit negatif (terutama pada cluster 1 berwarna merah). Hal ini menunjukkan bahwa masih terdapat data yang kurang jelas keanggotaannya dan berada di area overlap antar cluster.
+
+Selain itu, garis putus-putus merah pada grafik menunjukkan nilai rata-rata silhouette sebesar sekitar 0.21, yang tergolong rendah. Hal ini menunjukkan bahwa secara keseluruhan kualitas clustering belum optimal, karena cluster yang terbentuk belum memiliki pemisahan yang kuat dan masih terdapat banyak data yang tidak terklasifikasi dengan jelas. Jika dibandingkan antar cluster, cluster 2 (warna biru) terlihat memiliki distribusi nilai silhouette yang sedikit lebih tinggi dan lebih stabil dibanding cluster 1, yang menunjukkan bahwa anggota cluster 2 relatif lebih konsisten. Sedangkan, cluster 1 memiliki variasi nilai silhouette yang lebih rendah bahkan mendekati negatif, yang menunjukkan bahwa cluster ini memiliki struktur yang lebih lemah dan kemungkinan mengandung data yang kurang tepat dalam pengelompokan. 
+
+##K-MEDIANS
+```{r}
+kmedians_model <- pam(data_scaled, k = k_opt, metric = "manhattan")
+
+sil_kmedians <- silhouette(kmedians_model$clustering, dist(data_scaled))
+score_kmedians <- mean(sil_kmedians[,3])
+score_kmedians
+```
+Output yang dihasilkan adalah [1] 0.2079888, menunjukkan bahwa rata-rata nilai silhouette untuk hasil clustering K-Medians berada pada kisaran sekitar 0.21. Nilai ini tergolong rendah, karena nilai silhouette yang baik berada di atas 0.5. Nilai yang mendekati 0 menunjukkan bahwa banyak data berada di area perbatasan antar cluster, sehingga pemisahan antar kelompok tidak terlalu jelas. Hal ini menunjukkan bahwa meskipun metode K-Medians berhasil membagi data menjadi dua cluster, struktur cluster yang terbentuk masih relatif lemah dan terdapat kemungkinan overlap antar cluster.
+
+```{r}
+#Hasil Cluster K-Medians
+kmedians_model$clustering
+```
+Output diatas berupa deretan angka 1 dan 2 yang panjangnya sama dengan jumlah data dalam dataset. Dari pola output tersebut terlihat bahwa angka 2 muncul lebih sering dibandingkan angka 1, yang menunjukkan bahwa sebagian besar data dikelompokkan ke dalam cluster 2. Hal ini menunjukkan bahwa karakteristik mayoritas data memiliki kemiripan yang lebih kuat satu sama lain sehingga membentuk kelompok yang lebih besar, sedangkan cluster 1 berisi data dengan karakteristik yang lebih berbeda dari kelompok utama.
+
+```{r}
+#Ukuran Cluster K-Medians
+table(kmedians_model$clustering)
+```
+Hasil ini menunjukkan bahwa cluster 1 berisi 300 data, sedangkan cluster 2 berisi 680 data. Distribusi ini menunjukkan bahwa cluster 2 memiliki jumlah anggota yang jauh lebih besar dibandingkan cluster 1, sehingga pembagian cluster tidak seimbang. Ketidakseimbangan ini menunjukkan bahwa sebagian besar data memiliki karakteristik yang lebih mirip satu sama lain dan membentuk kelompok besar pada cluster 2, sedangkan cluster 1 hanya mewakili sebagian kecil data dengan pola yang berbeda. 
+
+```{r}
+fviz_cluster(kmedians_model, data = data_scaled)
+```
+Pada visualisasi cluster hasil K-Medians, grafik menunjukkan pemetaan data ke dalam dua cluster menggunakan reduksi dimensi Principal Component Analysis (PCA), yang direpresentasikan oleh sumbu Dim1 (29.8%) dan Dim2 (12.6%). Dim1 menjelaskan variasi terbesar dalam data sehingga menjadi pembeda utama antar cluster, sedangkan Dim2 memberikan variasi tambahan yang lebih kecil. Dari plot terlihat bahwa cluster 1 (warna merah) cenderung berada di sisi kanan dengan nilai Dim1 positif, sementara cluster 2 (warna biru) berada di sisi kiri dengan nilai Dim1 negatif. Hal ini menunjukkan bahwa pemisahan utama antar cluster terjadi secara horizontal berdasarkan komponen utama pertama, yang berarti fitur-fitur dalam dataset memiliki kontribusi signifikan dalam membedakan kedua kelompok pada dimensi tersebut.
+
+Jika diamati lebih lanjut, terdapat area di sekitar titik tengah (sekitar Dim1 ≈ 0) di mana kedua cluster saling berdekatan bahkan saling tumpang tindih. Hal ini menunjukkan bahwa tidak semua data memiliki batas pemisahan yang jelas, sehingga terdapat sejumlah observasi yang berada di wilayah transisi antar cluster. Selain itu, bentuk convex hull pada masing-masing cluster menunjukkan bahwa cluster 2 memiliki penyebaran yang lebih luas ke arah kiri, sedangkan cluster 1 lebih terkonsentrasi di sisi kanan namun tetap memiliki variasi yang cukup besar.
+
+
+##DBSCAN
+```{r}
+# Cari eps dengan kNN plot
+kNNdistplot(data_scaled, k = 5)
+abline(h = 2, col = "red")
+```
+Output dari grafik tersebut menunjukkan bahwa pada awal kurva (sebelah kiri), nilai jarak antar titik relatif kecil dan meningkat secara perlahan, yang menandakan bahwa sebagian besar data berada dalam kelompok yang cukup padat. Namun, pada bagian kanan grafik terlihat adanya kenaikan yang cukup tajam (elbow knee point), yang menunjukkan transisi dari area padat ke area yang lebih jarang (outlier atau noise). Garis merah pada y = 2 dipilih karena berada tepat sebelum lonjakan tajam tersebut, sehingga nilai eps = 2 dianggap sebagai batas optimal untuk membedakan antara titik yang berada dalam cluster dan titik yang dianggap noise. Maka, hasil visualisasi ini menunjukkan bahwa nilai eps yang dipilih sudah cukup representatif untuk menangkap struktur kepadatan data, di mana titik-titik di bawah garis merah akan cenderung membentuk cluster, sedangkan titik di atasnya berpotensi menjadi noise dalam proses DBSCAN.
+
+```{r}
+# Sesuaikan eps berdasarkan grafik
+eps_val <- 2
+
+dbscan_model <- dbscan(data_scaled, eps = eps_val, minPts = 5)
+
+cluster_db <- dbscan_model$cluster
+```
+
+```{r}
+# Hilangkan noise
+valid_idx <- cluster_db != 0
+
+if(length(unique(cluster_db[valid_idx])) > 1){
+  sil_dbscan <- silhouette(cluster_db[valid_idx],
+                           dist(data_scaled[valid_idx,]))
+  score_dbscan <- mean(sil_dbscan[,3])
+} else {
+  score_dbscan <- NA
+}
+```
+
+```{r}
+#Cluster
+cluster_db
+```
+Output yang ditampilkan menunjukkan bahwa sebagian besar data memiliki label 1, yang berarti mayoritas data tergabung dalam satu cluster utama. Selain itu, terdapat beberapa data dengan label 0 yang menandakan bahwa data tersebut dianggap sebagai noise karena tidak memiliki cukup tetangga dalam radius eps. Disisi lain, label 2 dan 3 muncul dalam jumlah yang sangat sedikit, yang menunjukkan adanya cluster kecil dengan kepadatan yang terbatas. Pola ini menunjukkan bahwa struktur data didominasi oleh satu kelompok besar, dengan beberapa kelompok kecil dan sejumlah outlier yang tersebar.
+
+```{r}
+#Jumlah Cluster dan Noise
+table(cluster_db)
+```
+Hasil ini menunjukkan bahwa terdapat 90 data yang dikategorikan sebagai noise (cluster 0), 878 data dalam cluster utama (cluster 1), serta masing-masing 6 data dalam cluster 2 dan cluster 3. Distribusi ini menunjukkan bahwa sebagian besar data sangat terkonsentrasi dalam satu cluster besar, sedangkan cluster lain sangat kecil dan cenderung tidak signifikan. Keberadaan 90 noise juga menunjukkan bahwa DBSCAN berhasil mengidentifikasi sejumlah data yang tidak mengikuti pola umum, yang merupakan keunggulan utama metode ini.
+
+```{r}
+score_dbscan
+```
+Nilai silhouette sebesar ~0.18 menunjukkan bahwa kualitas clustering DBSCAN tergolong rendah. Hal ini berarti bahwa pemisahan antar cluster tidak terlalu jelas dan banyak data yang berada di area perbatasan antar cluster. Selain itu, dominasi satu cluster besar (cluster 1) serta keberadaan cluster kecil yang sangat sedikit juga berkontribusi terhadap rendahnya nilai silhouette. Dibandingkan dengan K-Means (~0.21) dan K-Medians (~0.21), nilai ini lebih rendah, sehingga dapat disimpulkan bahwa pada dataset ini, DBSCAN belum mampu menghasilkan struktur cluster yang optimal meskipun memiliki keunggulan dalam mendeteksi noise.
+
+```{r}
+fviz_cluster(list(data = data_scaled, cluster = cluster_db))
+```
+Pada visualisasi cluster hasil DBSCAN, grafik menampilkan pemetaan data ke dalam empat kelompok yang diproyeksikan ke dalam dua dimensi menggunakan reduksi dimensi Principal Component Analysis (PCA) dengan sumbu Dim1 (29.8%) dan Dim2 (12.6%). Algoritma ini menemukan struktur cluster berdasarkan kerapatan (densitas) titik-titik data di ruang fitur. Dim1 menjelaskan proporsi variasi terbesar dalam data sebesar 29.8%, sehingga menjadi dimensi pembeda utama, sedangkan Dim2 sebesar 12.6% variasi tambahan yang melengkapi gambaran distribusi data secara keseluruhan.
+
+Dari grafik terlihat bahwa DBSCAN menghasilkan empat kelompok yang ditandai dengan empat simbol dan warna berbeda, yaitu cluster 0 (lingkaran merah muda), cluster 1 (segitiga hijau), cluster 2 (kotak biru muda), dan cluster 3 (tanda plus ungu). Cluster 1 yang ditandai segitiga hijau mendominasi hampir seluruh ruang plot dan mencakup sebagian besar observasi dalam dataset. Titik-titik hijau ini tersebar merata dari nilai Dim1 sekitar -3 hingga +4 dan Dim2 sekitar -4 hingga +3, dengan konsentrasi tertinggi di sekitar titik pusat grafik. Penyebaran yang sangat luas ini menunjukkan bahwa DBSCAN mengidentifikasi sebagian besar data sebagai satu populasi besar yang saling terhubung secara densitas, tanpa celah yang cukup signifikan untuk memisahkannya menjadi sub-kelompok yang lebih kecil.
+
+Cluster 0 yang ditandai dengan lingkaran merah muda tersebar di bagian tepi dan pinggiran grafik, mencakup titik-titik yang berada di luar batas inti cluster 1. Keberadaan cluster 0 dalam konteks DBSCAN merepresentasikan titik-titik noise atau outlier, yaitu observasi yang tidak memenuhi syarat minimum jumlah tetangga dalam radius epsilon yang ditetapkan, sehingga tidak dapat dikategorikan ke dalam cluster manapun yang terdeteksi secara padat. Hal ini terlihat dari posisi titik-titik merah muda yang tersebar di sudut-sudut ekstrem grafik, seperti di pojok kiri bawah (observasi 331, 642, 100), pojok kiri atas (observasi 240, 418), dan pojok kanan (observasi 667, 248), yang jauh dari pusat data.
+
+Cluster 2 yang ditandai kotak biru muda dan cluster 3 yang ditandai tanda plus ungu hanya memiliki sangat sedikit anggota yang terlihat dari simbol yang hampir tidak kelihatan di tengah grafik, berdesakan di antara dominasi titik-titik hijau. Keberadaan dua cluster kecil ini menunjukkan adanya sekelompok kecil observasi yang secara lokal memiliki kerapatan tinggi namun terpisah dari cluster 1 yang besar, meskipun pemisahan tersebut tampaknya sangat tipis dan nyaris tidak signifikan secara visual.
+
+Jika diamati lebih lanjut, convex hull yang membungkus cluster 1 (area kuning kehijauan) hampir sepenuhnya terangkum di dalam convex hull cluster 0 (area merah muda yang lebih luas). Kondisi ini mengartikan bahwa batas antara titik-titik yang dianggap inti cluster dan yang dianggap noise tidak memiliki pemisahan spasial yang tegas. Keduanya menempati wilayah yang saling tumpang tindih secara geometris. 
+
+
+##MEAN SHIFT
+```{r}
+# Convert data sclaed ke matrix
+data_matrix <- as.matrix(data_scaled)
+```
+```{r}
+# Bandwidth harus vector
+bw <- rep(1, ncol(data_matrix))
+```
+
+```{r}
+# Mean Shift
+meanshift_model <- meanShift(data_matrix, bandwidth = bw)
+```
+
+```{r}
+# Cluster
+cluster_ms <- meanshift_model$assignment
+cluster_ms
+```
+Output yang ditampilkan menunjukkan bahwa jumlah cluster yang terbentuk sangat banyak, bahkan mencapai ratusan cluster. Hal ini dapat dilihat dari variasi label cluster yang muncul hingga angka yang tinggi. Kondisi ini menunjukkan bahwa metode Mean Shift membagi data menjadi banyak kelompok kecil. Beberapa cluster memiliki jumlah anggota yang cukup besar, namun sebagian besar cluster hanya berisi sedikit data, bahkan ada yang hanya terdiri dari satu atau dua observasi. Pola ini menunjukkan bahwa data tidak terkonsentrasi dalam beberapa kelompok besar, melainkan tersebar dalam banyak kelompok kecil yang terfragmentasi.
+
+Kondisi ini terjadi ketika parameter bandwidth pada Mean Shift terlalu kecil, sehingga algoritma menjadi sangat sensitif terhadap variasi lokal dalam data. Akibatnya, setiap kepadatan kecil dianggap sebagai cluster tersendiri. Hal ini menyebabkan over-clustering, yaitu kondisi di mana jumlah cluster terlalu banyak dan tidak merepresentasikan struktur data secara umum.
+
+```{r}
+# Silhouette 
+if(length(unique(cluster_ms)) > 1){
+  sil_ms <- silhouette(cluster_ms, dist(data_scaled))
+  score_ms <- mean(sil_ms[,3])
+} else {
+  score_ms <- NA
+}
+```
+
+```{r}
+score_ms
+```
+Output yang dihasilkan sebesar -0.1080996 menunjukkan bahwa kualitas clustering yang dihasilkan oleh Mean Shift tergolong buruk. Nilai negatif ini menunjukkan bahwa sebagian besar data lebih dekat dengan cluster lain dibandingkan dengan cluster tempat data tersebut berada. Hal ini menandakan bahwa struktur cluster yang terbentuk tidak jelas dan terjadi banyak tumpang tindih antar cluster.
+
+```{r}
+#Jumlah Cluster
+table(cluster_ms)
+```
+Hasil output menunjukkan bahwa jumlah cluster yang terbentuk sangat banyak, yaitu mencapai lebih dari 250 cluster. Beberapa cluster memiliki jumlah anggota yang cukup besar, seperti cluster 4, cluster 31, dan cluster 3 yang memiliki puluhan anggota. Namun, sebagian besar cluster lainnya hanya berisi satu atau dua data saja. Pola ini menunjukkan bahwa data terbagi menjadi banyak kelompok kecil yang tidak merata. Kondisi tersebut menunjukkan bahwa algoritma Mean Shift mengalami over-clustering, yaitu membentuk terlalu banyak cluster kecil sehingga tidak mampu merepresentasikan struktur data secara keseluruhan. Hal ini disebabkan oleh pemilihan parameter bandwidth yang terlalu kecil, sehingga setiap variasi kecil dalam data dianggap sebagai cluster tersendiri.
+
+```{r}
+fviz_cluster(list(data = data_scaled, cluster = cluster_ms),
+             geom = "point",
+             shape = 19)
+```
+Dari grafik terlihat bahwa Mean Shift menghasilkan jumlah cluster yang sangat banyak, terlihat dari banyaknya warna berbeda yang tersebar di seluruh area plot, dengan label warna merah di sebelah kanan yang mencantumkan hingga 255 label cluster. Kondisi ini merupakan efek dari nilai bandwidth yang ditetapkan terlalu kecil, yaitu bw = 1 untuk setiap dimensi. Bandwidth yang kecil menyebabkan algoritma terlalu sensitif terhadap variasi lokal dalam data, sehingga setiap kelompok kecil titik yang secara lokal berdekatan dianggap sebagai modus tersendiri dan membentuk cluster yang terpisah.
+
+Jika diamati lebih lanjut, titik-titik data tersebar di seluruh ruang plot dari Dim1 sekitar -3 hingga +5 dan Dim2 sekitar -4.5 hingga +4, dengan konsentrasi tertinggi di sekitar pusat grafik. Namun tidak terdapat satu pun cluster yang secara jelas mendominasi wilayah tertentu secara eksklusif. Setiap warna hanya mewakili beberapa titik, dan warna-warna tersebut merata di seluruh area tanpa pola spasial yang tegas. Hal ini menunjukkan bahwa pembagian cluster yang dihasilkan tidak menunjukkan struktur kelompok yang sempurna.
+
+
+##Fuzzy C-Means
+```{r}
+fcm_model <- fcm(data_scaled, centers = k_opt)
+
+cluster_fcm <- apply(fcm_model$u, 1, which.max)
+
+sil_fcm <- silhouette(cluster_fcm, dist(data_scaled))
+score_fcm <- mean(sil_fcm[,3])
+```
+
+```{r}
+#Derajat keanggotaan
+head(fcm_model$u)
+```
+Output yang ditampilkan menunjukkan bahwa setiap data memiliki dua nilai keanggotaan, yaitu terhadap Cluster 1 dan Cluster 2. Seperti pada data pertama memiliki nilai 0.2966420 untuk Cluster 1 dan 0.7033580 untuk Cluster 2, yang berarti data tersebut lebih cenderung masuk ke Cluster 2, namun masih memiliki keterkaitan dengan Cluster 1. Hal ini menunjukkan bahwa batas antar cluster tidak tegas.
+
+```{r}
+cluster_fcm
+```
+```{r}
+#Jumlah Cluster
+table(cluster_fcm)
+```
+Output menunjukkan bahwa seluruh data hanya terbagi ke dalam dua cluster, yaitu cluster 1 dan cluster 2. Menunjukkan jumlah anggota pada masing-masing cluster, yaitu sebanyak 547 data pada cluster 1 dan 433 data pada cluster 2. Distribusi ini cukup seimbang meskipun cluster 1 memiliki jumlah anggota yang sedikit lebih banyak dibandingkan cluster 2.
+
+```{r}
+#Silhouette
+score_fcm
+```
+Nilai silhouette berada pada rentang -1 hingga 1, di mana semakin mendekati 1 menunjukkan kualitas cluster yang semakin baik, sedangkan nilai mendekati 0 menunjukkan adanya overlap antar cluster. Nilai 0.200511 ini menunjukkan bahwa struktur cluster yang terbentuk masih tergolong lemah hingga sedang, dengan kemungkinan adanya beberapa data yang berada di batas antar cluster.
+
+```{r}
+fviz_cluster(list(data = data_scaled, cluster = cluster_fcm))
+```
+Pada visualisasi cluster hasil Fuzzy C-Means, grafik menampilkan pemetaan data ke dalam dua kelompok yang direpresentasikan ke dalam dua dimensi menggunakan reduksi dimensi Principal Component Analysis (PCA) dengan sumbu Dim1 (29.8%) dan Dim2 (12.6%). Visualisasi yang ditampilkan ini merupakan representasi hard clustering, yaitu hasil konversi dari keanggotaan fuzzy ke label tunggal per observasi menggunakan prinsip keanggotaan tertinggi, sehingga setiap titik data hanya ditampilkan dalam satu warna meskipun secara matematis setiap observasi sebenarnya memiliki derajat keanggotaan ke kedua cluster sekaligus. Dim1 menjelaskan 29.8% total variasi data dan menjadi dimensi dengan pembeda terbesar antar cluster, sedangkan Dim2 sebesar 12.6% variasi tambahan yang melengkapi gambaran distribusi data secara dua dimensi.
+
+Dari grafik terlihat bahwa Fuzzy C-Means menghasilkan dua cluster yang cukup jelas secara visual, yaitu cluster 1 (lingkaran merah muda) yang mendominasi sisi kiri grafik dan cluster 2 (segitiga biru muda) yang mendominasi sisi kanan grafik. Cluster 1 terkonsentrasi di wilayah dengan nilai Dim1 negatif hingga sekitar 0, sedangkan cluster 2 menempati wilayah dengan nilai Dim1 positif hingga sekitar +5. Pola distribusi ini menunjukkan bahwa pemisahan utama antar kedua cluster terjadi secara horizontal sepanjang sumbu Dim1, yang berarti fitur-fitur dalam dataset yang paling banyak dikontribusikan ke komponen utama pertama adalah variabel-variabel yang paling berperan dalam membedakan kedua kelompok pelanggan ini.
+
+Jika diamati lebih lanjut, terdapat zona transisi yang cukup lebar di sekitar Dim1 ≈ 0 hingga +1, di mana titik-titik dari kedua cluster saling berdekatan dan sebagian saling tumpang tindih. Titik-titik yang berada di zona ini memiliki derajat keanggotaan yang hampir seimbang antara cluster 1 dan cluster (seperti 52% cluster 1 dan 48% cluster 2). Convex hull cluster 1 (area merah muda) membentang dari sudut kiri atas hingga kiri bawah grafik, dengan beberapa titik ekstrem seperti observasi 240, 418, 385 di sisi kiri atas dan observasi 331, 100 di sisi kiri bawah yang menjadi batas terluar kelompok ini. Sedangkan convex hull cluster 2 (area biru muda) membentang dari sekitar pusat grafik ke arah kanan, dengan titik-titik ekstrem seperti observasi 667, 248 di pojok kanan atas dan observasi 642, 484 di bagian bawah. Kedua convex hull ini saling tumpang tindih secara signifikan di area tengah grafik, yang mencerminkan bahwa secara geometris tidak ada batas pemisahan yang sempurna dan tegas antara kedua cluster.
+
+
+
+#PERBANDINGAN METODE 
+```{r}
+results <- data.frame(
+  Method = c("KMeans","KMedians","DBSCAN","MeanShift","FuzzyCMeans"),
+  Silhouette = c(score_kmeans, score_kmedians,
+                 score_dbscan, score_ms, score_fcm)
+)
+```
+
+```{r}
+results <- results %>% arrange(desc(Silhouette))
+
+print(results)
+```
+Output yang ditampilkan menunjukkan urutan metode clustering berdasarkan performanya, yaitu K-Means berada di peringkat pertama dengan nilai Silhouette sebesar 0.2131536, diikuti oleh K-Medians dengan nilai 0.2079888, kemudian Fuzzy C-Means dengan nilai 0.2005110, DBSCAN dengan nilai 0.1828381, dan terakhir Mean Shift dengan nilai negatif sebesar -0.1080996. Nilai negatif pada Mean Shift mengartikan bahwa banyak data kemungkinan berada pada cluster yang kurang tepat atau terjadi overlap yang cukup tinggi antar cluster, sehingga kualitas clustering-nya paling rendah dibandingkan metode lainnya.
+
+Perbedaan nilai antar metode sebenarnya tidak terlalu jauh untuk tiga metode teratas (K-Means, K-Medians, dan Fuzzy C-Means), yang menunjukkan bahwa ketiganya memiliki performa yang relatif mirip dalam mengelompokkan data. Namun, K-Means tetap unggul karena menghasilkan nilai Silhouette tertinggi, yang berarti pemisahan antar cluster lebih optimal dibandingkan metode lainnya.
+
+```{r}
+# Metode terbaik
+best_method <- results[1,]
+print(best_method)
+```
+Output menunjukkan bahwa metode terbaik adalah K-Means dengan nilai Silhouette sebesar 0.2131536. Hal ini menandakan bahwa K-Means merupakan metode yang paling sesuai untuk dataset yang digunakan dalam analisis ini, karena mampu menghasilkan cluster dengan tingkat pemisahan dan konsistensi yang paling baik dibandingkan metode lain yang diuji.
+
+#METODE CLUSTERING TERBAIK
+```{r}
+best_name <- best_method$Method
+
+if(best_name == "KMeans"){
+  final_cluster <- kmeans_model$cluster
+} else if(best_name == "KMedians"){
+  final_cluster <- kmedians_model$clustering
+} else if(best_name == "DBSCAN"){
+  final_cluster <- cluster_db
+} else if(best_name == "MeanShift"){
+  final_cluster <- cluster_ms
+} else {
+  final_cluster <- cluster_fcm
+}
+
+data_final <- data_clean
+data_final$Cluster <- final_cluster
+```
+
+```{r}
+best_name
+table(final_cluster)
+head(data_final)
+```
+Output menunjukkan bahwa terdapat dua cluster utama, yaitu cluster 1 dengan jumlah 374 data dan cluster 2 dengan jumlah 606 data. Distribusi ini menunjukkan bahwa cluster 2 memiliki jumlah anggota yang lebih banyak dibandingkan cluster 1, sehingga dapat dikatakan bahwa sebagian besar data cenderung memiliki karakteristik yang mirip dengan cluster 2. 
+
+Output tabel menunjukkan beberapa baris awal dari dataset yang berisi nilai-nilai pada berbagai kategori (Category.1 hingga Category.10) serta kolom tambahan yaitu Cluster yang menunjukkan hasil pengelompokan. Dari data tersebut terlihat bahwa setiap baris (observasi) telah berhasil diklasifikasikan ke dalam salah satu cluster, yaitu cluster 1 atau cluster 2. Sebagai contoh, data pertama dan kedua masuk ke dalam cluster 1, sedangkan data ketiga dan keempat masuk ke cluster 2. Hal ini menunjukkan bahwa proses clustering telah berjalan dengan baik, di mana setiap data dikelompokkan berdasarkan kemiripan karakteristik pada seluruh variabel kategori yang digunakan.
+
+
+#EDA Metode Terbaik
+```{r}
+#Distribusi Cluster
+table(data_final$Cluster)
+prop.table(table(data_final$Cluster))
+```
+Output menunjukkan bahwa terdapat 374 data pada cluster 1 dan 606 data pada cluster 2. Proporsi masing-masing cluster, yaitu sekitar 38.16% untuk cluster 1 dan 61.84% untuk cluster 2. Distribusi ini menunjukkan bahwa mayoritas data berada pada cluster 2, sehingga cluster tersebut dapat dianggap sebagai kelompok dominan dalam dataset.
+
+```{r}
+#Karakteristik Cluster
+cluster_summary <- data_final %>%
+  group_by(Cluster) %>%
+  summarise_all(mean)
+
+print(cluster_summary)
+```
+Hasil menunjukkan adanya perbedaan karakteristik antara cluster 1 dan cluster 2. Pada cluster 1, nilai rata-rata pada beberapa kategori seperti Category.3, Category.5, dan Category.6 cenderung lebih tinggi dibandingkan cluster 2. Sedangkan, cluster 2 memiliki nilai yang lebih rendah pada beberapa kategori tersebut, yang menunjukkan bahwa kedua cluster memiliki pola yang cukup berbeda dalam hal intensitas atau nilai fitur.
+
+```{r}
+#Fitur dominan tiap cluster
+library(tidyr)
+
+cluster_long <- cluster_summary %>%
+  pivot_longer(-Cluster)
+
+cluster_long %>%
+  group_by(Cluster) %>%
+  slice_max(order_by = value, n = 3)
+```
+Pada cluster 1, fitur yang paling dominan adalah Category.7, Category.8, dan Category.10, yang memiliki nilai rata-rata tertinggi dibandingkan fitur lainnya. Hal ini menunjukkan bahwa cluster 1 cenderung memiliki intensitas tinggi pada kategori-kategori yang ada.
+Pada cluster 2, fitur dominan juga mencakup Category.7, Category.10, dan Category.8, namun dengan kombinasi nilai yang sedikit berbeda, terutama pada Category.10 yang memiliki nilai lebih tinggi dibandingkan cluster 1.
+
+```{r}
+#PCA Visualization
+fviz_cluster(list(data = data_scaled, cluster = final_cluster))
+```
+Pada visualisasi PCA hasil EDA metode terbaik, grafik menampilkan pemetaan akhir data ke dalam dua cluster menggunakan reduksi dimensi Principal Component Analysis (PCA) dengan sumbu Dim1 (29.8%) dan Dim2 (12.6%). Visualisasi ini merupakan representasi final dari metode clustering yang terpilih sebagai terbaik berdasarkan skor silhouette tertinggi dalam perbandingan antar metode. Dim1 menjelaskan 29.8% total variasi data dan berperan sebagai dimensi pembeda utama antar kelompok, sedangkan Dim2 menyumbang 12.6% variasi tambahan yang membantu menggambarkan sebaran data secara lebih lengkap dalam ruang dua dimensi.
+
+Dari grafik terlihat bahwa dua cluster yang terbentuk memiliki distribusi spasial yang cukup kontras satu sama lain. Cluster 2 (segitiga biru muda) mendominasi sisi kiri grafik dengan nilai Dim1 negatif, terkonsentrasi di wilayah Dim1 sekitar -3 hingga 0, sedangkan cluster 1 (lingkaran merah muda) mendominasi sisi kanan grafik dengan nilai Dim1 positif, terkonsentrasi di wilayah Dim1 sekitar 0 hingga +5. Pola pemisahan horizontal yang konsisten ini menunjukka bahwa komponen utama pertama (Dim1) adalah dimensi yang paling kuat dalam membedakan kedua kelompok pelanggan, artinya terdapat kombinasi fitur-fitur tertentu dalam dataset yang secara signifikan berbeda antara kedua segmen dan berkontribusi besar terhadap pembentukan Dim1 tersebut.
+
+Jika diamati lebih lanjut, cluster 2 yang berada di sisi kiri memiliki penyebaran yang cukup luas ke arah vertikal. Titik-titik biru muda tersebar dari Dim2 sekitar -4 hingga +3, dengan beberapa titik ekstrem di pojok kiri atas seperti observasi 240, 418, 385, dan di bagian bawah seperti observasi 331 dan 100. Penyebaran vertikal yang lebar ini menunjukkan bahwa meskipun cluster 2 relatif homogen dalam dimensi Dim1 (semuanya di sisi kiri), kelompok ini tetap memiliki heterogenitas internal yang cukup besar pada dimensi Dim2, yang berarti anggota cluster 2 tidak sepenuhnya seragam dalam semua karakteristik.
+
+Cluster 1 di sisi kanan menunjukkan pola yang serupa, yaitu titik-titik merah muda tersebar dari Dim2 sekitar -4.5 hingga +3, dengan titik-titik ekstrem seperti observasi 667 dan 248 di pojok kanan atas, serta observasi 642 dan 484 di bagian bawah. Konsentrasi titik-titik merah muda paling padat terlihat di sekitar Dim1 ≈ +1 hingga +2.5 dan Dim2 ≈ -1 hingga +1, yang menunjukkan bahwa inti dari cluster 1 berada di wilayah tersebut dan titik-titik di luar area itu merupakan anggota yang lebih bersifat periferal dengan karakteristik yang sedikit lebih beragam dari anggota inti.
+
+Zona tumpang tindih antara kedua cluster terlihat cukup jelas di sekitar Dim1 ≈ 0, di mana titik-titik biru muda dan merah muda saling berdekatan dan sebagian bersilangan. Keberadaan zona transisi ini menunjukkan bahwa tidak ada batas pemisahan yang mutlak dan sempurna antara kedua kelompok pelanggan. Convex hull cluster 2 (area biru muda) terlihat membentang lebih luas ke arah kiri dan sedikit lebih besar secara keseluruhan dibandingkan convex hull cluster 1 (area merah muda), meskipun keduanya sama-sama menempati area yang cukup besar di ruang PCA. Tumpang tindih antara kedua convex hull terjadi di area tengah grafik, yang secara mencerminkan bahwa kedua cluster berbagi sebagian wilayah ruang fitur yang sama terutama pada observasi-observasi yang berada di perbatasan antar kelompok.
+
+```{r}
+#Boxplot
+data_long <- data_final %>%
+  pivot_longer(-Cluster)
+
+ggplot(data_long, aes(x = factor(Cluster), y = value)) +
+  geom_boxplot() +
+  facet_wrap(~name, scales = "free")
+```
+Pada panel Category.1, kedua cluster menunjukkan distribusi yang sangat mirip satu sama lain, median keduanya berada di sekitar nilai 1, dengan rentang interkuartil (IQR) yang hampir identik dan posisi box yang sejajar. Kesamaan distribusi ini menunjukkan bahwa Category.1 bukan merupakan variabel pembeda yang kuat antara kedua cluster. Kedua kelompok pelanggan memiliki karakteristik yang hampir setara pada dimensi ini, sehingga variabel ini berkontribusi kecil dalam membentuk perbedaan antar segmen.
+
+Pada panel Category.2 dan Category.3, terlihat pola yang lebih unik, dimana cluster 1 memiliki median yang sedikit lebih tinggi dibandingkan cluster 2, dengan box cluster 2 yang cenderung lebih rendah posisinya. Perbedaan ini, menunjukkan bahwa kedua kategori ini memberikan kontribusi dalam membedakan kedua kelompok. Cluster 1 secara rata-rata memiliki nilai yang lebih tinggi pada Category.2 dan Category.3 dibandingkan cluster 2, yang dapat diartikan bahwa kelompok ini memiliki intensitas atau frekuensi yang lebih tinggi pada fitur yang direpresentasikan oleh kedua kategori tersebut.
+
+Pada panel Category.4, perbedaan antar cluster terlihat paling mencolok dibandingkan variabel lainnya. Cluster 1 memiliki sebaran nilai yang jauh lebih luas dengan banyak outlier di atas, sedangkan median cluster 1 sendiri berada di sekitar 0.5 yaitu sangat rendah namun dengan ekor distribusi yang panjang ke atas. Cluster 2 juga memiliki median yang rendah dengan penyebaran yang lebih sempit. Keberadaan outlier yang sangat banyak pada cluster 1 di Category.4 menunjukkan bahwa sebagian kecil anggota cluster 1 memiliki nilai yang sangat ekstrem tinggi pada kategori ini, sedangkan mayoritas anggotanya tetap berada di nilai rendah. Hal ini menunjukkan karakteristik distribusi yang sangat skewed ke kanan, yang dapat merepresentasikan perilaku pembelian atau penggunaan yang sangat tidak merata dalam kelompok tersebut.
+
+Pada panel Category.5, kedua cluster menunjukkan distribusi yang relatif mirip dengan median di sekitar nilai 1, namun cluster 1 terlihat memiliki IQR yang sedikit lebih lebar dibandingkan cluster 2. Beberapa outlier terlihat di kedua cluster, namun perbedaannya tidak cukup signifikan untuk menjadikan Category.5 sebagai pembeda utama antar kelompok.
+
+Pada panel Category.6, cluster 1 secara konsisten menunjukkan nilai yang lebih tinggi dibandingkan cluster 2. Median cluster 1 berada di sekitar 2 hingga 2.5, sedangkan median cluster 2 berada di sekitar 1.5. Selain itu, box cluster 1 memiliki IQR yang lebih lebar, menunjukkan variasi internal yang lebih besar dalam kelompok ini pada dimensi Category.6. Perbedaan yang cukup jelas ini menjadikan Category.6 sebagai salah satu variabel yang lebih informatif dalam membedakan karakteristik kedua segmen.
+
+Pada panel Category.7, perbedaan antar cluster tampak sangat kecil, dimana rentang nilai keseluruhan hanya berkisar antara 3.16 hingga 3.21, dan median kedua cluster hanya berbeda tipis di sekitar 3.18. Cluster 1 memiliki median yang sedikit lebih tinggi dari cluster 2. Rentang nilai yang sangat sempit pada Category.7 menunjukkan bahwa variabel ini memiliki variansi yang sangat rendah di seluruh dataset.
+
+Pada panel Category.8, kedua cluster menunjukkan distribusi yang sangat mirip dengan median di sekitar 2.8, IQR yang hampir sama, dan rentang whisker yang sebanding. Hampir tidak ada perbedaan yang signifikan antara cluster 1 dan cluster 2 pada variabel ini, menunjukkan bahwa Category.8 bukan merupakan variabel pembeda yang signifikan dalam analisis clustering ini.
+
+Pada panel Category.9, kedua cluster menunjukkan distribusi yang sangat serupa dengan median di sekitar 1.5, meskipun cluster 2 memiliki outlier yang lebih banyak di sisi atas. Kesamaan distribusi ini menunjukkan bahwa Category.9 juga bukan pembeda yang kuat antar kelompok, dan kedua segmen memiliki perilaku yang relatif homogen pada dimensi ini.
+
+Pada panel Category.10, terlihat cluster 2 memiliki median yang jauh lebih tinggi (sekitar 3.0) dibandingkan cluster 1 (sekitar 2.5), dengan box cluster 2 yang seluruhnya berada di atas box cluster 1 tanpa tumpang tindih yang signifikan. Kondisi ini menunjukkan bahwa Category.10 adalah variabel paling diskriminatif dalam membedakan kedua cluster. Cluster 2 secara konsisten memiliki nilai yang lebih tinggi pada kategori ini dibandingkan cluster 1, yang dapat diinterpretasikan bahwa segmen cluster 2 memiliki tingkat aktivitas, konsumsi, atau preferensi yang secara signifikan lebih tinggi pada fitur yang direpresentasikan oleh Category.10.
+
+
+#Kesimpulan
+Berdasarkan hasil implementasi dan evaluasi lima metode clustering pada dataset Travel Reviews, dapat disimpulkan bahwa setiap metode menghasilkan struktur cluster yang berbeda dengan tingkat kualitas yang bervariasi. Evaluasi menggunakan Silhouette Coefficient menunjukkan bahwa metode dengan nilai silhouette tertinggi merupakan metode yang paling optimal dalam memisahkan data, karena mampu menghasilkan cluster yang  terpisah dengan baik. Metode seperti DBSCAN dan Mean Shift menunjukkan karakteristik khusus dalam mendeteksi pola berbasis densitas, termasuk keberadaan data noise, sedangkan metode berbasis partisi seperti K-Means dan K-Medians lebih stabil dalam pembentukan cluster dengan jumlah yang telah ditentukan.
+
+Hasil clustering terbaik yang diperoleh menunjukkan bahwa data dapat dikelompokkan menjadi dua cluster utama dengan karakteristik preferensi wisata yang berbeda. Analisis lanjutan menggunakan rata-rata fitur pada masing-masing cluster menunjukkan adanya kecenderungan pengguna terhadap kategori wisata tertentu, sehingga dapat memberikan insight mengenai pola perilaku pengguna. Secara keseluruhan, analisis ini menunjukkan bahwa kombinasi antara pemilihan metode clustering, proses preprocessing yang tepat, serta evaluasi menggunakan Silhouette Coefficient sangat penting dalam menghasilkan pengelompokan data yang optimal dan bermakna.
+
+#Sumber Referensi
+[1] M. Alsmadi et al., “A Survey on Clustering Algorithms and Their Constraints,” 2023. [Online]. Available: https://www.researchgate.net/publication/377330306_A_Survey_on_Clustering_Algorithms_and_their_Constraints
+
+[2] D. Arthur and S. Vassilvitskii, “An Extensive Empirical Comparison of K-Means Initialization Algorithms,” University of Essex Repository, 2022. [Online]. Available: https://repository.essex.ac.uk/32969/1/An_extensive_empirical_comparison_of_k-means_initialisation_algorithms.pdf
+
+[3] S. S. Basha et al., “Efficiency Evaluation of K-Means, K-Medians and K-Mode Clustering Methods Using SSD,” 2024. [Online]. Available: https://www.researchgate.net/publication/385701457_Efficiency_Evaluation_of_K-Means_K-Medians_and_K-Mode_Clustering_Methods_Using_SSD
+
+[4] M. Ester, H.-P. Kriegel, J. Sander, and X. Xu, “A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise (DBSCAN Revisited),” Northeastern University Lecture Notes, 2021. [Online]. Available: https://www.khoury.northeastern.edu/home/vip/teach/DMcourse/2_cluster_EM_mixt/notes_slides/revisitofrevisitDBSCAN.pdf
+
+[5] D. R. Sari et al., “Penerapan Algoritma Clustering dalam Data Mining,” Seminar Nasional Teknologi Informasi dan Komputer, 2022. [Online]. Available: https://ejurnal.seminar-id.com/index.php/tin/article/view/7550/3855
+
+[6] J. Zhang et al., “Advances in Clustering Algorithms for Data Analysis,” Expert Systems with Applications, 2023. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0957417423008795
+
+[7] A. Saxena, M. Prasad, A. Gupta, N. Bharill, O. P. Patel, A. Tiwari, M. J. Er, W. Ding, and C.-T. Lin, “A Review of Clustering Techniques and Developments,” Neurocomputing, vol. 267, pp. 664–681, 2017. [Online]. Available: https://www.sciencedirect.com/science/article/abs/pii/S0925231217311815
+
+[8] A. Fahad et al., “A Survey of Clustering Algorithms for Big Data: Taxonomy and Empirical Analysis,” Ain Shams Engineering Journal, vol. 10, no. 1, pp. 121–135, 2019. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S131915781931105X
+
+[9] H. Wang et al., “Clustering Optimization Using Machine Learning Techniques,” IEEE, 2024. [Online]. Available: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10681061
+
+[10] R. Kurniawan, A. Nugroho, and D. Setiawan, “Implementasi Algoritma Clustering pada Data Mining,” Jurnal Komputa, vol. 13, no. 1, 2024. doi: 10.34010/komputa.v13i1.11710
+
+
+
